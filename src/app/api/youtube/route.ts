@@ -29,7 +29,7 @@ async function searchYouTubeDirect(query: string, maxResults: number): Promise<a
         const html = await res.text();
 
         // Extract ytInitialData JSON from the HTML
-        const match = html.match(/var ytInitialData = ({.*?});/s);
+        const match = html.match(/var ytInitialData = ({[\s\S]*?});/);
         if (!match) {
             console.error("Could not find ytInitialData in YouTube HTML");
             return [];
