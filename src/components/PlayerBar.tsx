@@ -75,6 +75,7 @@ export default function PlayerBar() {
     const expandedContainerRef = useRef<HTMLDivElement>(null);
     const [progress, setProgress] = useState(0);
     const [duration, setDuration] = useState(0);
+    const [hoverProgress, setHoverProgress] = useState<number | null>(null);
     const progressInterval = useRef<any>(null);
     const currentVideoId = useRef<string | null>(null);
 
@@ -213,6 +214,18 @@ export default function PlayerBar() {
         } catch { }
     };
 
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!duration) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const percentage = x / rect.width;
+        setHoverProgress(percentage * duration);
+    };
+
+    const handleMouseLeave = () => {
+        setHoverProgress(null);
+    };
+
     // Cleanup on close
     useEffect(() => {
         if (!isPlayerVisible) {
@@ -305,9 +318,19 @@ export default function PlayerBar() {
 
                 {/* Progress bar (interactive) */}
                 <div
-                    className="h-1 bg-white/5 cursor-pointer group"
+                    className="h-1 bg-white/5 cursor-pointer group relative"
                     onClick={handleSeek}
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
                 >
+                    {hoverProgress !== null && duration > 0 && (
+                        <div 
+                            className="absolute -top-7 text-xs bg-surface-light border border-white/10 px-2 py-1 rounded text-white transform -translate-x-1/2 pointer-events-none z-50 shadow-md whitespace-nowrap"
+                            style={{ left: `${(hoverProgress / duration) * 100}%` }}
+                        >
+                            {formatTime(hoverProgress)}
+                        </div>
+                    )}
                     <div
                         className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-300 relative"
                         style={{ width: `${progressPercent}%` }}

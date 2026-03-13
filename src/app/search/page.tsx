@@ -50,6 +50,7 @@ interface ProcessedMovie {
 function SearchContent() {
     const searchParams = useSearchParams();
     const query = searchParams.get("q") || "";
+    const tmdbId = searchParams.get("id") || "";
 
     const [isLoading, setIsLoading] = useState(false);
     const [actor, setActor] = useState<ActorResult | null>(null);
@@ -184,7 +185,7 @@ function SearchContent() {
             // Step 1: Search TMDB for actor
             setLoadingPhase("Searching for hero...");
             const tmdbRes = await fetch(
-                `/api/tmdb?q=${encodeURIComponent(query)}`
+                `/api/tmdb?q=${encodeURIComponent(query)}${tmdbId ? `&id=${tmdbId}` : ""}`
             );
             if (!tmdbRes.ok) throw new Error("Failed to search TMDB");
             const tmdbData = await tmdbRes.json();
@@ -250,13 +251,13 @@ function SearchContent() {
         } finally {
             setIsLoading(false);
         }
-    }, [query, userId, createActor, createMoviesBatch, addSearch]);
+    }, [query, tmdbId, userId, createActor, createMoviesBatch, addSearch]);
 
     useEffect(() => {
-        if (query) {
+        if (query || tmdbId) {
             performSearch();
         }
-    }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [query, tmdbId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const totalSongs = movies.reduce(
         (sum, movie) => sum + movie.songs.length,

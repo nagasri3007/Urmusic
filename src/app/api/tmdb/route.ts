@@ -6,9 +6,10 @@ const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q");
+    const id = searchParams.get("id");
 
-    if (!query) {
-        return NextResponse.json({ error: "Query parameter 'q' is required" }, { status: 400 });
+    if (!query && !id) {
+        return NextResponse.json({ error: "Query parameter 'q' or 'id' is required" }, { status: 400 });
     }
 
     try {
@@ -44,58 +45,93 @@ export async function GET(req: NextRequest) {
             "dhanush": "Dhanush",
             "simbu": "Silambarasan",
             "str": "Silambarasan",
+            "nithin": "Nithiin",
         };
 
-        const normalizedQuery = query.toLowerCase().trim();
-        const effectiveQuery = ALIASES[normalizedQuery] || query;
+        const normalizedQuery = query?.toLowerCase().trim() || "";
+        const effectiveQuery = ALIASES[normalizedQuery] || normalizedQuery;
 
-        console.log(`Searching TMDB for: "${effectiveQuery}" (Original: "${query}")`);
+        console.log(`Searching TMDB for: "${effectiveQuery}" (Original: "${query}", ID: "${id}")`);
 
-        // Search for the person
-        const searchRes = await fetch(
-            `${TMDB_BASE_URL}/search/person?query=${encodeURIComponent(effectiveQuery)}&language=en-US&page=1`,
-            {
-                headers: {
-                    Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
-                    Accept: "application/json",
-                },
+        let actor: any = null;
+
+        if (id) {
+            // Fetch person by exact ID
+            const personRes = await fetch(
+                `${TMDB_BASE_URL}/person/${id}?language=en-US`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+                        Accept: "application/json",
+                    },
+                }
+            );
+
+            if (!personRes.ok) {
+                throw new Error(`TMDB person fetch failed: ${personRes.status}`);
             }
-        );
 
-        if (!searchRes.ok) {
-            throw new Error(`TMDB search failed: ${searchRes.status}`);
-        }
-
-        const searchData = await searchRes.json();
-
-        if (searchData.results.length === 0) {
-            return NextResponse.json({ actor: null, movies: [] });
-        }
-
-        console.log("Top TMDB Result:", JSON.stringify(searchData.results[0]?.name));
-
-        // Filter for actors only (known_for_department === "Acting")
-        // Then sort by popularity descending to get the most relevant match
-        const actorResults = searchData.results
-            .filter((p: any) => p.known_for_department === "Acting")
-            .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
-
-        if (actorResults.length === 0) {
-            // If no exact "Acting" match, try all results but prioritize actors
-            const fallback = searchData.results
-                .sort((a: any, b: any) => {
-                    // Prioritize "Acting" department
-                    if (a.known_for_department === "Acting" && b.known_for_department !== "Acting") return -1;
-                    if (a.known_for_department !== "Acting" && b.known_for_department === "Acting") return 1;
-                    return (b.popularity || 0) - (a.popularity || 0);
-                });
-
-            if (fallback.length === 0) {
+            actor = await personRes.json();
+            
+            if (!actor || !actor.id) {
                 return NextResponse.json({ actor: null, movies: [] });
             }
-        }
+            
+            // Format to match search result format exactly for compatibility
+            actor = {
+                id: actor.id,
+                name: actor.name,
+                profile_path: actor.profile_path,
+                known_for_department: actor.known_for_department,
+                popularity: actor.popularity,
+            };
+        } else {
+            // Search for the person by query
+            const searchRes = await fetch(
+                `${TMDB_BASE_URL}/search/person?query=${encodeURIComponent(effectiveQuery)}&language=en-US&page=1`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+                        Accept: "application/json",
+                    },
+                }
+            );
 
-        const actor = actorResults.length > 0 ? actorResults[0] : searchData.results[0];
+            if (!searchRes.ok) {
+                throw new Error(`TMDB search failed: ${searchRes.status}`);
+            }
+
+            const searchData = await searchRes.json();
+
+            if (searchData.results.length === 0) {
+                return NextResponse.json({ actor: null, movies: [] });
+            }
+
+            console.log("Top TMDB Result:", JSON.stringify(searchData.results[0]?.name));
+
+            // Filter for actors only (known_for_department === "Acting")
+            // Then sort by popularity descending to get the most relevant match
+            const actorResults = searchData.results
+                .filter((p: any) => p.known_for_department === "Acting")
+                .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
+
+            if (actorResults.length === 0) {
+                // If no exact "Acting" match, try all results but prioritize actors
+                const fallback = searchData.results
+                    .sort((a: any, b: any) => {
+                        // Prioritize "Acting" department
+                        if (a.known_for_department === "Acting" && b.known_for_department !== "Acting") return -1;
+                        if (a.known_for_department !== "Acting" && b.known_for_department === "Acting") return 1;
+                        return (b.popularity || 0) - (a.popularity || 0);
+                    });
+
+                if (fallback.length === 0) {
+                    return NextResponse.json({ actor: null, movies: [] });
+                }
+            }
+
+            actor = actorResults.length > 0 ? actorResults[0] : searchData.results[0];
+        }
 
         // Get their movie credits
         const creditsRes = await fetch(
